@@ -1,5 +1,8 @@
 module Wisepdf
   class Writer
+    require 'posix-spawn'
+    include POSIX::Spawn
+
     def initialize(wkhtmltopdf = nil, options = {})
       self.wkhtmltopdf = wkhtmltopdf unless wkhtmltopdf.nil?
       self.options = options
@@ -9,11 +12,12 @@ module Wisepdf
       invoke = self.command(options).join(' ')
       self.log(invoke) unless Wisepdf::Configuration.production?
 
-      result = IO.popen(invoke, "wb+") do |pdf|
-        pdf.puts(string)
-        pdf.close_write
-        pdf.gets(nil)
-      end
+      pid, pin, pout, err = popen4(invoke)
+      pin.write string
+      pin.close
+      ::Process.wait(pid)
+
+      result = pout.read
 
       raise Wisepdf::WriteError if result.to_s.strip.empty?
 
